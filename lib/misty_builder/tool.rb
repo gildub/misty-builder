@@ -8,11 +8,13 @@ include MistyBuilder::Parser
 
 def init(params)
   @command = nil
-  @base = 'fetched/'
+  @local_base = 'fetched/'
+  @source = "../misty/lib/misty/openstack"
+
   file, url = nil, nil
   constant = nil
-  selected_components = []
   excluded_components = []
+  selected_components = []
 
   # Commands
   case params[0]
@@ -30,7 +32,7 @@ def init(params)
   until params.empty?
     case params[0]
     when '-t', '--target='
-      @base = params[1]
+      @local_base = params[1]
       params.shift(2)
     when '-m', '--module='
       selected_components << params[1]
@@ -46,11 +48,11 @@ def init(params)
     end
   end
 
-  lservices = MistyBuilder::SERVICES.select { |service| !excluded_components.include?(service.name) }
+  services = MistyBuilder::SERVICES.select { |service| !excluded_components.include?(service.name) }
   @services = unless selected_components.empty?
-    lservices.select { |service| selected_components.include?(service.name) }
+    services.select { |service| selected_components.include?(service.name) }
   else
-    lservices.dup
+    services.dup
   end
 end
 
@@ -64,21 +66,26 @@ def fetch(service)
   puts "#{constant}/#{service.version}"
   html_source = fetch_source(service.url)
   api = self.send(service.parser, html_source)
-  target = @base + "#{service.name}/#{service.name}_#{service.version}.rb"
-  Dir.mkdir(@base + "#{service.name}") unless Dir.exist?(@base + "#{service.name}")
-  Dir.mkdir(@base + "#{service.name}/#{service.version}") unless Dir.exist?(@base + "#{service.name}/#{service.version}")
+  target = @local_base + service_path(service) + ".rb"
+  Dir.mkdir(@local_base + "#{service.name}") unless Dir.exist?(@local_base + "#{service.name}")
   generate(api, target, constant, service.version)
 end
 
 def diff(service)
-  target = @base + "#{service.name}/#{service.name}_#{service.version}.rb"
-  res = %x{diff #{target} ../misty/lib/misty/openstack/#{service.name}/#{service.version}/#{service.version}.rb}
+  file = "#{service_path(service)}.rb"
+  res = %x{diff #{@local_base}/#{file} #{@source}/#{file}}
   if $?.exitstatus && !res.empty?
     puts "----------------- #{service.name} / #{service.version} -----------------"
     puts res
     puts "---------------------------------------------------------------------------"
     puts
   end
+end
+
+private
+
+def service_path(service)
+  "#{service.name}/#{service.name}_#{service.version}"
 end
 
 init(ARGV)
